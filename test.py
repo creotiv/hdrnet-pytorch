@@ -2,7 +2,7 @@ import os
 import sys
 import cv2
 import numpy as np
-import skimage as sk
+import skimage.exposure
 import torch
 from torchvision import transforms
 
@@ -15,7 +15,7 @@ def test(ckpt, args={}):
     state_dict, params = load_params(state_dict)
     params.update(args)
 
-    device = torch.device("cpu")
+    device = torch.device("cuda")
     tensor = transforms.Compose([
         transforms.ToTensor(),
     ])
@@ -32,7 +32,7 @@ def test(ckpt, args={}):
         img = model(low, full)
         print('MIN:',torch.min(img),'MAX:',torch.max(img))
         img = (img.cpu().detach().numpy()).transpose(0,2,3,1)[0]
-        img = sk.exposure.rescale_intensity(img, out_range=(0.0,255.0)).astype(np.uint8)
+        img = skimage.exposure.rescale_intensity(img, out_range=(0.0,255.0)).astype(np.uint8)
         cv2.imwrite(params['test_out'], img[...,::-1])
 
 if __name__ == '__main__':

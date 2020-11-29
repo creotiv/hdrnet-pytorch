@@ -22,7 +22,7 @@ def train(params=None):
     device = torch.device("cuda")
 
     train_dataset = HDRDataset(params['dataset'], params=params, suffix=params['dataset_suffix'])
-    train_loader = DataLoader(train_dataset, batch_size=params['batch_size'])
+    train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=True)
 
     model = HDRPointwiseNN(params=params)
     ckpt = get_latest_ckpt(params['ckpt_path'])
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=4)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--log-interval', type=int, default=10)
-    parser.add_argument('--ckpt-interval', type=int, default=500)
+    parser.add_argument('--ckpt-interval', type=int, default=100)
     parser.add_argument('--dataset', type=str, default='', help='Dataset path with input/output dirs', required=True)
     parser.add_argument('--dataset-suffix', type=str, default='', help='Add suffix to input/output dirs. Useful when train on different dataset image sizes')
 
