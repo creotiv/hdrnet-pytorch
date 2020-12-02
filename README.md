@@ -29,7 +29,6 @@ To test image run:
 
 ## Known issues
 
-* Torch F.grid_smaple doesn't have triliniear interpolation that was used in original network(which is strange cause it can use 3D image as input), that's make things worse. Hope they will fix this, until that will try fix this somehow.
 * Only PointwiseNN implemented currently
 * Dataset has no augmentation which making training difficult 
 * No raw HDR input
