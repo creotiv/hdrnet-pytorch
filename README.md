@@ -16,7 +16,7 @@ To install the Python dependencies, run:
     
 To train a model, run the following command:
 
-    python train.py --test-image=./DSC_1177.jpg --dataset=/dataset_path --lr=0.001
+    python train.py --test-image=./DSC_1177.jpg --dataset=/dataset_path --lr=0.0001
     
 To get all train params run:
     
