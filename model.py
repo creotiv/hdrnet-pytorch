@@ -50,7 +50,7 @@ class Slice(nn.Module):
         hg = hg.float().repeat(N, 1, 1).unsqueeze(3) / (H-1) * 2 - 1 # norm to [-1,1] NxHxWx1
         wg = wg.float().repeat(N, 1, 1).unsqueeze(3) / (W-1) * 2 - 1 # norm to [-1,1] NxHxWx1
         guidemap = guidemap.permute(0,2,3,1).contiguous()
-        guidemap_guide = torch.cat([wg, hg, guidemap ], dim=3).unsqueeze(1) # Nx1xHxWx3
+        guidemap_guide = torch.cat([hg, wg, guidemap], dim=3).unsqueeze(1) # Nx1xHxWx3
         coeff = F.grid_sample(bilateral_grid, guidemap_guide, 'bilinear', align_corners=True)
         
         return coeff.squeeze(2)
