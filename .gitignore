@@ -89,6 +89,11 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+algo/
+ch/
+ds2/
+out.png
+
 
 # Spyder project settings
 .spyderproject

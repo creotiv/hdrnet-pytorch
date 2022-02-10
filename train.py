@@ -3,17 +3,22 @@ import sys
 from test import test
 
 import cv2
+import random
 import matplotlib.pyplot as plt
 import numpy as np
 import PIL
 import torch
-from torch.optim import SGD, Adam
+from torch.optim import SGD, Adam, RAdam, RMSprop
 from torch.utils.data import DataLoader
+import adabound
 
 from dataset import HDRDataset
 from metrics import psnr
-from model import HDRPointwiseNN
+from model import HDRPointwiseNN, L2LOSS
 from utils import load_image, save_params, get_latest_ckpt, load_params
+
+torch.manual_seed(13)
+random.seed(13)
 
 
 def train(params=None):
@@ -33,8 +38,10 @@ def train(params=None):
         model.load_state_dict(state_dict)
     model.to(device)
 
-    mseloss = torch.nn.MSELoss()
-    optimizer = Adam(model.parameters(), params['lr'])
+    mseloss = torch.nn.SmoothL1Loss()#L2LOSS()#torch.nn.MSELoss()#torch.nn.SmoothL1Loss()#
+    optimizer = Adam(model.parameters(), params['lr'], eps=1e-7)#, weight_decay=1e-5)
+    # optimizer = SGD(model.parameters(), params['lr'], momentum=0.9)
+    # optimizer = adabound.AdaBound(model.parameters(), lr=params['lr'], final_lr=0.1)
 
     count = 0
     for e in range(params['epochs']):
@@ -47,7 +54,7 @@ def train(params=None):
             t = target.to(device)
             res = model(low, full)
             
-            total_loss = mseloss(res, t)
+            total_loss = mseloss(t,res)
             total_loss.backward()
 
             if (count+1) % params['log_interval'] == 0:
@@ -78,12 +85,13 @@ if __name__ == '__main__':
     parser.add_argument('--luma-bins', type=int, default=8)
     parser.add_argument('--channel-multiplier', default=1, type=int)
     parser.add_argument('--spatial-bin', type=int, default=16)
+    parser.add_argument('--guide-complexity', type=int, default=16)
     parser.add_argument('--batch-norm', action='store_true', help='If set use batch norm')
     parser.add_argument('--net-input-size', type=int, default=256, help='Size of low-res input')
     parser.add_argument('--net-output-size', type=int, default=512, help='Size of full-res input/output')
 
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
-    parser.add_argument('--batch-size', type=int, default=4)
+    parser.add_argument('--batch-size', type=int, default=6)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--log-interval', type=int, default=10)
     parser.add_argument('--ckpt-interval', type=int, default=100)

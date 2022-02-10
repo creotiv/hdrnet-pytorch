@@ -1,9 +1,16 @@
+from turtle import forward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from collections import OrderedDict
+from slice import bilateral_slice
 
+
+class L2LOSS(nn.Module):
+
+    def forward(self, x,y):
+        return torch.mean((x-y)**2)
 
 class ConvBlock(nn.Module):
     def __init__(self, inc , outc, kernel_size=3, padding=1, stride=1, use_bias=True, activation=nn.ReLU, batch_norm=False):
@@ -11,6 +18,11 @@ class ConvBlock(nn.Module):
         self.conv = nn.Conv2d(int(inc), int(outc), kernel_size, padding=padding, stride=stride, bias=use_bias)
         self.activation = activation() if activation else None
         self.bn = nn.BatchNorm2d(outc) if batch_norm else None
+
+        if use_bias and not batch_norm:
+            self.conv.bias.data.fill_(0.00)
+        # aka TF variance_scaling_initializer
+        torch.nn.init.kaiming_uniform_(self.conv.weight)#, mode='fan_out',nonlinearity='relu')
         
     def forward(self, x):
         x = self.conv(x)
@@ -25,7 +37,13 @@ class FC(nn.Module):
         super(FC, self).__init__()
         self.fc = nn.Linear(int(inc), int(outc), bias=(not batch_norm))
         self.activation = activation() if activation else None
-        self.bn = nn.BatchNorm1d(outc) if batch_norm else None
+        self.bn = nn.BatchNorm1d(outc) if batch_norm else None  
+        
+        if not batch_norm:
+            self.fc.bias.data.fill_(0.00)
+        # aka TF variance_scaling_initializer
+        torch.nn.init.kaiming_uniform_(self.fc.weight)#, mode='fan_out',nonlinearity='relu')
+
         
     def forward(self, x):
         x = self.fc(x)
@@ -40,20 +58,29 @@ class Slice(nn.Module):
         super(Slice, self).__init__()
 
     def forward(self, bilateral_grid, guidemap): 
+        bilateral_grid = bilateral_grid.permute(0,3,4,2,1)
+        guidemap = guidemap.squeeze(1)
+        # grid: The bilateral grid with shape (gh, gw, gd, gc).
+        # guide: A guide image with shape (h, w). Values must be in the range [0, 1].
+        coeefs = bilateral_slice(bilateral_grid, guidemap).permute(0,3,1,2)
+        return coeefs
         # Nx12x8x16x16
-        device = bilateral_grid.get_device()
-        N, _, H, W = guidemap.shape
-        hg, wg = torch.meshgrid([torch.arange(0, H), torch.arange(0, W)]) # [0,511] HxW
-        if device >= 0:
-            hg = hg.to(device)
-            wg = wg.to(device)
-        hg = hg.float().repeat(N, 1, 1).unsqueeze(3) / (H-1) * 2 - 1 # norm to [-1,1] NxHxWx1
-        wg = wg.float().repeat(N, 1, 1).unsqueeze(3) / (W-1) * 2 - 1 # norm to [-1,1] NxHxWx1
-        guidemap = guidemap.permute(0,2,3,1).contiguous()
-        guidemap_guide = torch.cat([hg, wg, guidemap], dim=3).unsqueeze(1) # Nx1xHxWx3
-        coeff = F.grid_sample(bilateral_grid, guidemap_guide, 'bilinear', align_corners=True)
-        
-        return coeff.squeeze(2)
+        # print(guidemap.shape)
+        # print(bilateral_grid.shape)
+        # device = bilateral_grid.get_device()
+        # N, _, H, W = guidemap.shape
+        # hg, wg = torch.meshgrid([torch.arange(0, H), torch.arange(0, W)]) # [0,511] HxW
+        # if device >= 0:
+        #     hg = hg.to(device)
+        #     wg = wg.to(device)
+        # hg = hg.float().repeat(N, 1, 1).unsqueeze(3) / (H-1)# * 2 - 1 # norm to [-1,1] NxHxWx1
+        # wg = wg.float().repeat(N, 1, 1).unsqueeze(3) / (W-1)# * 2 - 1 # norm to [-1,1] NxHxWx1
+        # guidemap = guidemap.permute(0,2,3,1).contiguous()
+        # guidemap_guide = torch.cat([hg, wg, guidemap], dim=3).unsqueeze(1) # Nx1xHxWx3
+        # # When mode='bilinear' and the input is 5-D, the interpolation mode used internally will actually be trilinear. 
+        # coeff = F.grid_sample(bilateral_grid, guidemap_guide, 'bilinear')#, align_corners=True)
+        # print(coeff.shape)
+        # return coeff.squeeze(2)
 
 class ApplyCoeffs(nn.Module):
     def __init__(self):
@@ -67,19 +94,39 @@ class ApplyCoeffs(nn.Module):
             g = a21*r + a22*g + a23*b + a24
             ...
         '''
-        
-        R = torch.sum(full_res_input * coeff[:, 0:3, :, :], dim=1, keepdim=True) + coeff[:, 3:4, :, :]
-        G = torch.sum(full_res_input * coeff[:, 4:7, :, :], dim=1, keepdim=True) + coeff[:, 7:8, :, :]
-        B = torch.sum(full_res_input * coeff[:, 8:11, :, :], dim=1, keepdim=True) + coeff[:, 11:12, :, :]
+
+        # out_channels = []
+        # for chan in range(n_out):
+        #     ret = scale[:, :, :, chan, 0]*input_image[:, :, :, 0]
+        #     for chan_i in range(1, n_in):
+        #         ret += scale[:, :, :, chan, chan_i]*input_image[:, :, :, chan_i]
+        #     if has_affine_term:
+        #         ret += offset[:, :, :, chan]
+        #     ret = tf.expand_dims(ret, 3)
+        #     out_channels.append(ret)
+
+        # ret = tf.concat(out_channels, 3)
+        """
+            R = r1[0]*r2 + r1[1]*g2 + r1[2]*b3 +r1[3]
+        """
+
+        # print(coeff.shape)
+        # R = torch.sum(full_res_input * coeff[:, 0:3, :, :], dim=1, keepdim=True) + coeff[:, 3:4, :, :]
+        # G = torch.sum(full_res_input * coeff[:, 4:7, :, :], dim=1, keepdim=True) + coeff[:, 7:8, :, :]
+        # B = torch.sum(full_res_input * coeff[:, 8:11, :, :], dim=1, keepdim=True) + coeff[:, 11:12, :, :]
+        R = torch.sum(full_res_input * coeff[:, 0:3, :, :], dim=1, keepdim=True) + coeff[:, 9:10, :, :]
+        G = torch.sum(full_res_input * coeff[:, 3:6, :, :], dim=1, keepdim=True) + coeff[:, 10:11, :, :]
+        B = torch.sum(full_res_input * coeff[:, 6:9, :, :], dim=1, keepdim=True) + coeff[:, 11:12, :, :]
 
         return torch.cat([R, G, B], dim=1)
+
 
 class GuideNN(nn.Module):
     def __init__(self, params=None):
         super(GuideNN, self).__init__()
         self.params = params
-        self.conv1 = ConvBlock(3, 16, kernel_size=1, padding=0, batch_norm=True)
-        self.conv2 = ConvBlock(16, 1, kernel_size=1, padding=0, activation=nn.Sigmoid) #nn.Tanh
+        self.conv1 = ConvBlock(3, params['guide_complexity'], kernel_size=1, padding=0, batch_norm=True)
+        self.conv2 = ConvBlock(params['guide_complexity'], 1, kernel_size=1, padding=0, activation= nn.Sigmoid) #nn.Tanh nn.Sigmoid
 
     def forward(self, x):
         return self.conv2(self.conv1(x))#.squeeze(1)
@@ -111,7 +158,6 @@ class Coeffs(nn.Module):
 
         # global features
         n_layers_global = int(np.log2(sb/4))
-        print(n_layers_global)
         self.global_features_conv = nn.ModuleList()
         self.global_features_fc = nn.ModuleList()
         for i in range(n_layers_global):
@@ -130,7 +176,7 @@ class Coeffs(nn.Module):
         self.local_features.append(ConvBlock(8*cm*lb, 8*cm*lb, 3, activation=None, use_bias=False))
         
         # predicton
-        self.conv_out = ConvBlock(8*cm*lb, lb*nout*nin, 1, padding=0, activation=None)
+        self.conv_out = ConvBlock(8*cm*lb, lb*nout*nin, 1, padding=0, activation=None)#,batch_norm=True)
 
    
     def forward(self, lowres_input):
