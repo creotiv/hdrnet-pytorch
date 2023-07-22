@@ -4,6 +4,6 @@ numpy==1.17.0
 opencv-python==4.1.0.25
 Pillow==7.1.0
 scikit-image==0.15.0
-torch==1.1.0
+torch==1.13.1
 torchsummary==1.5.1
 torchvision==0.3.0
