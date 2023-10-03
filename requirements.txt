@@ -2,7 +2,7 @@ h5py==2.9.0
 imageio==2.5.0
 numpy==1.17.0
 opencv-python==4.1.0.25
-Pillow==7.1.0
+Pillow==10.0.1
 scikit-image==0.15.0
 torch==1.1.0
 torchsummary==1.5.1
